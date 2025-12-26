@@ -1,9 +1,24 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const connectDB = require("./backend/config/db");
+const connectDB = require("./config/db");
 
 const app = express();
+
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+
+app.use(helmet());
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/api", apiLimiter);
+
 
 // Middleware
 app.use(cors());
@@ -13,7 +28,7 @@ app.use(express.json());
 connectDB();
 
 // Routes
-app.use("/api/submissions", require("./backend/routes/submissions"));
+app.use("/api/submissions", require("./routes/submissions"));
 
 // Health check
 app.get("/", (req, res) => {
@@ -21,6 +36,4 @@ app.get("/", (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
