@@ -45,23 +45,13 @@ app.use("/api", apiLimiter);
 const allowedOrigins = [
   "https://getfamilia.ca",
   "https://www.getfamilia.ca",
-
+  "https://getfamilia.netlify.app",
 ];
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // allow requests with no origin (curl, Postman, server-to-server)
-      if (!origin) return cb(null, true);
+app.use(cors({
+  origin: allowedOrigins
+}));
 
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-
-      return cb(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
 
 /**
  * Body parsing
