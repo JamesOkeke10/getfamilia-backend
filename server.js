@@ -43,7 +43,6 @@ app.use("/api", apiLimiter);
 const allowedOrigins = new Set([
   "https://getfamilia.ca",
   "https://www.getfamilia.ca",
-  // If you still use a Netlify site, keep these:
   "https://getfamilia.netlify.app",
 ]);
 
@@ -55,7 +54,6 @@ function corsOriginCallback(origin, callback) {
   if (allowedOrigins.has(origin)) return callback(null, true);
 
   // Allow any Netlify preview/branch deploy domain (optional but helpful)
-  // Example: https://main--getfamilia.netlify.app or https://deploy-preview-12--getfamilia.netlify.app
   if (origin.endsWith(".netlify.app")) return callback(null, true);
 
   return callback(new Error("CORS blocked"), false);
@@ -70,8 +68,8 @@ app.use(
   })
 );
 
-// IMPORTANT: respond to preflight
-app.options("*", cors({ origin: corsOriginCallback }));
+// IMPORTANT: respond to preflight (FIXED: "*" -> /.*/ )
+app.options(/.*/, cors({ origin: corsOriginCallback }));
 
 /**
  * Body parsing
