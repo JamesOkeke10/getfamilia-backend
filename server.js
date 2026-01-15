@@ -36,9 +36,6 @@ app.use("/api", apiLimiter);
 
 /**
  * CORS
- * - Allows your production domains
- * - Allows Netlify deploys (including previews) if you still use Netlify
- * - Allows requests with no Origin (Postman, curl, Render health checks)
  */
 const allowedOrigins = new Set([
   "https://getfamilia.ca",
@@ -47,13 +44,12 @@ const allowedOrigins = new Set([
 ]);
 
 function corsOriginCallback(origin, callback) {
-  // Allow server-to-server/no-origin requests
+  // Allow no-origin requests (Postman, curl, Render health checks)
   if (!origin) return callback(null, true);
 
-  // Allow exact matches
   if (allowedOrigins.has(origin)) return callback(null, true);
 
-  // Allow any Netlify preview/branch deploy domain (optional but helpful)
+  // Allow any Netlify preview domain if needed
   if (origin.endsWith(".netlify.app")) return callback(null, true);
 
   return callback(new Error("CORS blocked"), false);
@@ -68,7 +64,7 @@ app.use(
   })
 );
 
-// IMPORTANT: respond to preflight (FIXED: "*" -> /.*/ )
+// IMPORTANT: Preflight handler (do NOT use "*")
 app.options(/.*/, cors({ origin: corsOriginCallback }));
 
 /**
