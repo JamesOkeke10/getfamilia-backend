@@ -1,94 +1,73 @@
 const { Resend } = require("resend");
 
-function requireEnv(name) {
-  const val = process.env[name];
-  if (!val || String(val).trim() === "") {
-    throw new Error(`Missing required env var: ${name}`);
-  }
-  return String(val).trim();
+const resendKey = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.FROM_EMAIL || "Get Familia <onboarding@resend.dev>";
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL;
+
+if (!resendKey) {
+  console.warn("RESEND_API_KEY is missing. Emails will not send.");
+}
+if (!NOTIFY_EMAIL) {
+  console.warn("NOTIFY_EMAIL is missing. Admin notifications will not send.");
 }
 
-function normalizeEmail(s) {
-  return String(s || "").trim().toLowerCase();
+const resend = resendKey ? new Resend(resendKey) : null;
+
+// Simple HTML escaping
+function esc(str = "") {
+  return String(str).replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  }[m]));
 }
 
 async function sendSubmissionEmail({ name, email, inquiryType, links, message }) {
-  const RESEND_API_KEY = requireEnv("RESEND_API_KEY");
-  const FROM_EMAIL = requireEnv("FROM_EMAIL");     // e.g. "Get Familia <onboarding@resend.dev>"
-  const NOTIFY_EMAIL = requireEnv("NOTIFY_EMAIL"); // e.g. "info@getfamilia.ca"
+  if (!resend) throw new Error("Resend is not configured (missing RESEND_API_KEY).");
+  if (!NOTIFY_EMAIL) throw new Error("Missing NOTIFY_EMAIL env var.");
 
-  const resend = new Resend(RESEND_API_KEY);
-
-  const safeName = String(name || "").trim();
-  const userEmail = normalizeEmail(email);
-  const safeInquiry = String(inquiryType || "").trim();
-  const safeLinks = String(links || "").trim();
-  const safeMsg = String(message || "").trim();
-
-  // 1) Notify you (admin)
-  const notifySubject = `New Contact Form: ${safeInquiry} — ${safeName}`;
-  const notifyHtml = `
-    <div style="font-family:Arial,sans-serif; line-height:1.5;">
-      <h2>New submission received</h2>
-      <p><strong>Name:</strong> ${escapeHtml(safeName)}</p>
-      <p><strong>Email:</strong> ${escapeHtml(userEmail)}</p>
-      <p><strong>Inquiry Type:</strong> ${escapeHtml(safeInquiry)}</p>
-      ${safeLinks ? `<p><strong>Links:</strong> ${escapeHtml(safeLinks)}</p>` : ""}
-      <p><strong>Message:</strong></p>
-      <pre style="white-space:pre-wrap; background:#f6f6f6; padding:12px; border-radius:8px;">${escapeHtml(safeMsg)}</pre>
-      <p style="color:#666;">Reply to this email to respond to the sender.</p>
-    </div>
+  // 1) Admin notification
+  const adminSubject = `New Contact Submission (${inquiryType}) — ${name}`;
+  const adminHtml = `
+    <h2>New Contact Submission</h2>
+    <p><b>Name:</b> ${esc(name)}</p>
+    <p><b>Email:</b> ${esc(email)}</p>
+    <p><b>Inquiry Type:</b> ${esc(inquiryType)}</p>
+    <p><b>Links:</b> ${esc(links || "-")}</p>
+    <p><b>Message:</b><br/>${esc(message).replace(/\n/g, "<br/>")}</p>
   `;
 
-  const notifyResult = await resend.emails.send({
+  const notify = await resend.emails.send({
     from: FROM_EMAIL,
     to: [NOTIFY_EMAIL],
-    reply_to: userEmail, // so you can reply directly to the sender
-    subject: notifySubject,
-    html: notifyHtml,
+    replyTo: email, // IMPORTANT: lets you reply directly to the user
+    subject: adminSubject,
+    html: adminHtml,
   });
 
-  // If Resend returns an error, throw it so we can see it in logs
-  if (notifyResult?.error) {
-    throw new Error(`Resend notify error: ${JSON.stringify(notifyResult.error)}`);
-  }
-
-  // 2) Auto-reply to the user
-  const autoSubject = "We received your message — Get Familia";
-  const autoHtml = `
-    <div style="font-family:Arial,sans-serif; line-height:1.5;">
-      <p>Hi ${escapeHtml(safeName || "there")},</p>
-      <p>Thanks for reaching out to <strong>Get Familia</strong>. We’ve received your message and will get back to you soon.</p>
-      <p><strong>Your inquiry:</strong> ${escapeHtml(safeInquiry)}</p>
-      <p style="margin-top:14px; color:#666;">If you need to add more info, just reply to this email.</p>
-      <p style="margin-top:18px;">— Get Familia Team</p>
-    </div>
+  // 2) Auto-reply to user
+  const userSubject = "We received your message — Get Familia";
+  const userHtml = `
+    <p>Hi ${esc(name)},</p>
+    <p>Thanks for reaching out to <b>Get Familia</b>. We received your message and we’ll get back to you soon.</p>
+    <p><b>Your inquiry:</b> ${esc(inquiryType)}</p>
+    <p><b>Your message:</b><br/>${esc(message).replace(/\n/g, "<br/>")}</p>
+    <p>— Get Familia Team</p>
   `;
 
-  const autoResult = await resend.emails.send({
+  const autoReply = await resend.emails.send({
     from: FROM_EMAIL,
-    to: [userEmail],
-    subject: autoSubject,
-    html: autoHtml,
+    to: [email],
+    subject: userSubject,
+    html: userHtml,
   });
 
-  if (autoResult?.error) {
-    throw new Error(`Resend auto-reply error: ${JSON.stringify(autoResult.error)}`);
-  }
-
   return {
-    notifyId: notifyResult?.data?.id || null,
-    autoReplyId: autoResult?.data?.id || null,
+    notifyId: notify?.data?.id,
+    autoReplyId: autoReply?.data?.id,
   };
-}
-
-function escapeHtml(str) {
-  return String(str || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 module.exports = { sendSubmissionEmail };

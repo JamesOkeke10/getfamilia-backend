@@ -27,7 +27,6 @@ router.post(
   ],
   async (req, res) => {
     try {
-      // 1) Validate
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -39,7 +38,6 @@ router.post(
 
       const { name, email, inquiryType, links, message } = req.body;
 
-      // 2) Save to MongoDB
       const submission = await Submission.create({
         name,
         email,
@@ -48,22 +46,23 @@ router.post(
         message,
       });
 
-      // 3) Try sending email (but don't block save)
-      let emailStatus = { sent: false, error: null, notifyId: null, autoReplyId: null };
+      // Email sending visibility
+      let emailStatus = { sent: false };
 
       try {
         const result = await sendSubmissionEmail({ name, email, inquiryType, links, message });
-        emailStatus = { sent: true, error: null, ...result };
+        emailStatus = { sent: true, ...result };
       } catch (emailErr) {
-        console.error("Email sending failed:", emailErr?.message || emailErr);
-        emailStatus = { sent: false, error: emailErr?.message || "Email failed", notifyId: null, autoReplyId: null };
+        console.error("Email sending failed (FULL):", emailErr);
+        emailStatus = {
+          sent: false,
+          error: emailErr?.message || String(emailErr),
+        };
       }
 
       return res.status(201).json({
         success: true,
-        message: emailStatus.sent
-          ? "Submission received successfully."
-          : "Submission saved, but email delivery failed (check server logs).",
+        message: "Submission received successfully.",
         submissionId: submission._id,
         emailStatus,
       });
