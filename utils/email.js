@@ -1,82 +1,51 @@
 const { Resend } = require("resend");
 
-function requiredEnv(name) {
-  const val = process.env[name];
-  if (!val) throw new Error(`Missing env var: ${name}`);
-  return val;
-}
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// One Resend client for the whole app
-const resend = new Resend(requiredEnv("RESEND_API_KEY"));
+async function sendSubmissionEmail({ name, email, inquiryType, links, message }) {
+  if (!process.env.RESEND_API_KEY) throw new Error("Missing RESEND_API_KEY");
+  if (!process.env.FROM_EMAIL) throw new Error("Missing FROM_EMAIL");
+  if (!process.env.NOTIFY_EMAIL) throw new Error("Missing NOTIFY_EMAIL");
 
-async function sendSubmissionEmails({ name, email, inquiryType, links, message }) {
-  const from = requiredEnv("FROM_EMAIL");       // e.g. Get Familia <no-reply@getfamilia.ca>
-  const notifyTo = requiredEnv("NOTIFY_EMAIL"); // e.g. info@getfamilia.ca
+  const from = process.env.FROM_EMAIL;
+  const notifyTo = process.env.NOTIFY_EMAIL;
 
-  // 1) ADMIN NOTIFICATION
+  // 1️⃣ Admin notification
   await resend.emails.send({
     from,
     to: notifyTo,
-    subject: `New Contact Submission – ${inquiryType}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-        <h2>New Submission</h2>
-        <p><strong>Name:</strong> ${escapeHtml(name)}</p>
-        <p><strong>Email:</strong> ${escapeHtml(email)}</p>
-        <p><strong>Inquiry Type:</strong> ${escapeHtml(inquiryType)}</p>
-        <p><strong>Links:</strong> ${escapeHtml(links || "N/A")}</p>
-        <p><strong>Message:</strong></p>
-        <div style="padding:12px;border:1px solid #ddd;border-radius:8px;background:#fafafa;">
-          ${escapeHtml(message).replace(/\n/g, "<br/>")}
-        </div>
-      </div>
-    `,
+    subject: `New Contact Submission — ${inquiryType}`,
+    replyTo: email,
+    text: `
+New submission received:
+
+Name: ${name}
+Email: ${email}
+Inquiry Type: ${inquiryType}
+Links: ${links || "None"}
+
+Message:
+${message}
+    `.trim(),
   });
 
-  // 2) AUTO-REPLY TO USER
+  // 2️⃣ Auto-reply to user
   await resend.emails.send({
     from,
     to: email,
-    subject: "We received your message – Get Familia",
-    html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <p>Hi ${escapeHtml(name)},</p>
+    subject: "We received your message — Get Familia",
+    text: `
+Hi ${name},
 
-        <p>Thank you for reaching out to <strong>Get Familia</strong>.</p>
+Thanks for reaching out to Get Familia 🎶
 
-        <p>
-          We’ve received your message and our team will review it shortly.
-          If it’s a strong fit, we’ll reach out to confirm next steps.
-        </p>
+We’ve received your message and our team will review it shortly.
+If it’s a strong fit, we’ll get back to you soon.
 
-        <p><strong>Your inquiry type:</strong> ${escapeHtml(inquiryType)}</p>
-
-        <hr style="border:none;border-top:1px solid #eee;margin:18px 0;" />
-
-        <p style="margin:0;">
-          Best regards,<br/>
-          <strong>Get Familia Team</strong><br/>
-          Toronto, Canada
-        </p>
-
-        <p style="color:#6b7280;font-size:12px;margin-top:16px;">
-          This is an automated confirmation. Please do not reply to this email.
-        </p>
-      </div>
-    `,
+Best regards,
+Get Familia Team
+    `.trim(),
   });
-
-  return true;
 }
 
-// Prevent HTML injection in emails
-function escapeHtml(str) {
-  return String(str || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-module.exports = { sendSubmissionEmails };
+module.exports = { sendSubmissionEmail };
