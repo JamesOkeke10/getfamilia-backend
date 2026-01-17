@@ -1,58 +1,82 @@
 const { Resend } = require("resend");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-function escapeHtml(str = "") {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function requiredEnv(name) {
+  const val = process.env[name];
+  if (!val) throw new Error(`Missing env var: ${name}`);
+  return val;
 }
 
-async function sendSubmissionEmail({ name, email, inquiryType, links, message }) {
-  const safeName = escapeHtml(name);
-  const safeEmail = escapeHtml(email);
-  const safeInquiry = escapeHtml(inquiryType);
-  const safeLinks = escapeHtml(links);
-  const safeMessage = escapeHtml(message).replaceAll("\n", "<br/>");
+// One Resend client for the whole app
+const resend = new Resend(requiredEnv("RESEND_API_KEY"));
 
-  // 1) Email to you (admin notification)
+async function sendSubmissionEmails({ name, email, inquiryType, links, message }) {
+  const from = requiredEnv("FROM_EMAIL");       // e.g. Get Familia <no-reply@getfamilia.ca>
+  const notifyTo = requiredEnv("NOTIFY_EMAIL"); // e.g. info@getfamilia.ca
+
+  // 1) ADMIN NOTIFICATION
   await resend.emails.send({
-    from: process.env.FROM_EMAIL,
-    to: process.env.NOTIFY_EMAIL,
-    subject: `New Get Familia Submission: ${name} (${inquiryType})`,
+    from,
+    to: notifyTo,
+    subject: `New Contact Submission – ${inquiryType}`,
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h2 style="margin:0 0 12px;">New Submission Received</h2>
-        <p><strong>Name:</strong> ${safeName}</p>
-        <p><strong>Email:</strong> ${safeEmail}</p>
-        <p><strong>Inquiry Type:</strong> ${safeInquiry}</p>
-        <p><strong>Links:</strong> ${safeLinks || "N/A"}</p>
-        <p><strong>Message:</strong><br/>${safeMessage}</p>
-        <hr/>
-        <p style="color:#666; font-size: 12px;">Sent from GetFamilia backend.</p>
+      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <h2>New Submission</h2>
+        <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+        <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+        <p><strong>Inquiry Type:</strong> ${escapeHtml(inquiryType)}</p>
+        <p><strong>Links:</strong> ${escapeHtml(links || "N/A")}</p>
+        <p><strong>Message:</strong></p>
+        <div style="padding:12px;border:1px solid #ddd;border-radius:8px;background:#fafafa;">
+          ${escapeHtml(message).replace(/\n/g, "<br/>")}
+        </div>
       </div>
     `,
   });
 
-  // 2) Auto-reply to the person (recommended)
+  // 2) AUTO-REPLY TO USER
   await resend.emails.send({
-    from: process.env.FROM_EMAIL,
+    from,
     to: email,
-    subject: "We received your message — Get Familia",
+    subject: "We received your message – Get Familia",
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <p>Hi ${safeName},</p>
-        <p>Thanks for reaching out to <strong>Get Familia</strong>. We’ve received your message and will review it shortly.</p>
-        <p><strong>What you sent:</strong><br/>${safeMessage}</p>
-        <p style="margin-top:16px;">If you added links, we’ll check them and get back to you as soon as possible.</p>
-        <p style="margin-top:16px;">— Get Familia Team</p>
-        <p style="color:#666; font-size: 12px;">This is an automated confirmation.</p>
+        <p>Hi ${escapeHtml(name)},</p>
+
+        <p>Thank you for reaching out to <strong>Get Familia</strong>.</p>
+
+        <p>
+          We’ve received your message and our team will review it shortly.
+          If it’s a strong fit, we’ll reach out to confirm next steps.
+        </p>
+
+        <p><strong>Your inquiry type:</strong> ${escapeHtml(inquiryType)}</p>
+
+        <hr style="border:none;border-top:1px solid #eee;margin:18px 0;" />
+
+        <p style="margin:0;">
+          Best regards,<br/>
+          <strong>Get Familia Team</strong><br/>
+          Toronto, Canada
+        </p>
+
+        <p style="color:#6b7280;font-size:12px;margin-top:16px;">
+          This is an automated confirmation. Please do not reply to this email.
+        </p>
       </div>
     `,
   });
+
+  return true;
 }
 
-module.exports = { sendSubmissionEmail };
+// Prevent HTML injection in emails
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+module.exports = { sendSubmissionEmails };
